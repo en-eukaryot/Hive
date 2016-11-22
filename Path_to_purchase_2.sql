@@ -1,0 +1,132 @@
+-- Queries launched to get the distribution of the switch in devices prior to buying
+-- check the partner_id in the parameters below before launching the query
+-- only partner_ids that are deemed clean can be used for the analysis
+
+-- Be careful to replace the table names Ctrl Replace 'cluo' with your user name, everywhere except for the first table which is the reference table
+
+-- !!!! Change partner_id here !!!!
+-- SET IO.sort.mb = 1024;
+-- SET hive.EXEC.reducers.max = 1500;
+-- SET hive.cli.PRINT.header = true;
+-- SET hive.exec.parallel = true;
+--
+-- CREATE TEMPORARY FUNCTION row_sequence as 'com.criteo.hadoop.hive.udf.UDFRowSequence';
+--
+-- SET partner_id = 2429;
+
+-- STEP 1: gets for each user_id (principal and matched) the timestamp, partner_id but also device and events
+-- gets the row numbers to be able to join afterwards
+-- DROP TABLE IF EXISTS cluo.all_buyers_events_country_vertical;
+-- CREATE TABLE cluo.all_buyers_events_country_vertical AS
+-- SELECT
+--     row_sequence() AS num_row
+--     ,`timestamp`
+--     ,partner_id
+--     ,super_uid
+--     ,user_id
+--     ,CASE
+--         WHEN device_type IN ('iPhone', 'Android - Smartphone') THEN 'Smartphone'
+-- 		WHEN device_type IN ('iPad', 'Android - Tablet') THEN 'Tablet'
+-- 		ELSE 'Desktop'
+-- 		END AS device
+--     ,event_type
+-- FROM
+-- 	(SELECT /*+MAPJOIN(m,c)*/
+-- 		*
+-- 	FROM cluo.all_buyers_events ev      --change according to the first step
+-- 	JOIN bi_datamart.bi_dim_merchant m
+--         ON m.merchant_id = ev.partner_id
+-- 	JOIN bi_datamart.bi_dim_client c
+--         ON c.client_id = m.most_displayed_client_id
+-- 	WHERE
+-- 		device_type IN ('iPad','iPhone','Android - Smartphone', 'Android - Tablet', 'Desktop')
+-- 		AND ev.partner_id = ${hiveconf:partner_id}
+-- 	ORDER BY partner_id, super_uid ASC, ev.`timestamp` DESC
+-- 	) log
+-- 	;
+
+-- STEP 2: joins the table above with itself to have for each line the timestamp, partner_id, superuid and device
+-- but ensuring that same device use was removed (gets the switch)
+--/* SWITCH TABLE */
+-- DROP TABLE IF EXISTS cluo.all_switch_country_vertical;
+--
+-- CREATE TABLE cluo.all_switch_country_vertical AS
+-- SELECT
+--     t1.`timestamp`,
+--     t1.partner_id,
+--     t1.super_uid,
+--     t1.device
+-- FROM cluo.all_buyers_events_country_vertical t1
+-- JOIN cluo.all_buyers_events_country_vertical t2 ON t2.num_row = t1.num_row + 1
+-- WHERE
+--     t2.user_id <> t1.user_id
+--     AND t1.user_id <> '00000000-0000-0000-0000-000000000000'
+-- ORDER BY t1.partner_id, t1.super_uid ASC, t1.`timestamp` DESC;
+
+
+
+-- --STEP 3: get the top 3 device for browsing (on top of the device used for the sale) per partner and super_id
+-- -- CREATE TEMPORARY FUNCTION row_sequence as 'com.criteo.hadoop.hive.udf.UDFRowSequence';
+--
+-- -- concat partner_id and super_uid for ease of the query after
+-- DROP TABLE IF EXISTS cluo.all_switch_temp_country_vertical;
+-- CREATE TABLE cluo.all_switch_temp_country_vertical AS
+-- SELECT
+--     row_sequence() AS num_row
+-- 	,CONCAT(partner_id, super_uid) AS id
+-- 	,`timestamp` AS ts
+-- 	,device
+-- FROM cluo.all_switch_country_vertical
+-- ;
+--
+-- -- max (ts) to get the timestamp of the sale to ensure we keep the device used for the sale
+-- DROP TABLE IF EXISTS cluo.list_id_country_vertical;
+-- CREATE TABLE cluo.list_id_country_vertical AS
+-- SELECT
+-- 	id
+-- 	,MAX(ts) AS timestamp_ref
+-- FROM cluo.all_switch_temp_country_vertical
+-- GROUP BY id
+-- ;
+--
+-- -- gets the last three devices used for browsing before buying the product
+-- DROP TABLE IF EXISTS cluo.all_switch_id_country_vertical;
+-- CREATE TABLE cluo.all_switch_id_country_vertical AS
+-- SELECT
+-- 	did.id
+-- 	,did.timestamp_ref
+-- 	,t1.device AS device_sale
+-- 	,t2.device AS device_1
+-- 	,t3.device AS device_2
+-- 	,t4.device AS device_3
+-- FROM cluo.list_id_country_vertical did
+-- JOIN cluo.all_switch_temp_country_vertical t1 ON t1.id = did.id AND t1.ts = did.timestamp_ref
+-- LEFT OUTER JOIN cluo.all_switch_temp_country_vertical t2 ON t2.num_row = t1.num_row +1 AND t2.id = t1.id
+-- LEFT OUTER JOIN cluo.all_switch_temp_country_vertical t3 ON t3.num_row = t1.num_row +2 AND t3.id = t1.id
+-- LEFT OUTER JOIN cluo.all_switch_temp_country_vertical t4 ON t4.num_row = t1.num_row +3 AND t4.id = t1.id
+-- ;
+
+
+--STEP 4: count of the distribution in the devices
+
+-- DROP TABLE IF EXISTS cluo.all_switch_distrib_phonetabletdesktop;
+-- CREATE TABLE cluo.all_switch_distrib_phonetabletdesktop AS
+-- SELECT
+-- 	device_sale
+-- 	,device_1
+-- 	,device_2
+-- 	,device_3
+-- 	,count(0) AS count
+-- FROM cluo.all_switch_id_country_vertical
+-- GROUP BY
+-- 	device_sale
+-- 	,device_1
+-- 	,device_2
+-- 	,device_3;
+
+
+-- DROP TABLE cluo.all_buyers_events_country_vertical;
+-- DROP TABLE cluo.all_switch_country_vertical;
+-- DROP TABLE cluo.all_switch_temp_country_vertical;
+-- DROP TABLE cluo.list_id_country_vertical;
+-- DROP TABLE cluo.all_switch_id_country_vertical;
