@@ -1,8 +1,10 @@
+--- Environment parameters ---
 SET mapred.map.output.compression.codec = com.hadoop.compression.lzo.LzopCodec;
--- SET sort.io.mb=512;
--- SET hive.enforce.bucketing = true;
-SET hive.cli.print.header = true;
+SET sort.io.mb = 1024;
+SET hive.cli.print.header = TRUE;
+SET hive.exec.parallel = TRUE;
 
+--- Query parameters ---
 SET startDate = '2016-07-01';
 SET endDate = '2016-09-30';
 SET trans_enddate = "2016-10-30";
@@ -34,7 +36,7 @@ FROM
             impression_id,
             user_id
     ) disp
-LEFT OUTER JOIN(
+LEFT OUTER JOIN (
         SELECT
             impression_id,
             COALESCE(item_id, 0) AS item_id,
@@ -49,8 +51,9 @@ LEFT OUTER JOIN(
         GROUP BY
             impression_id ,
             COALESCE(item_id, 0)
-    ) clk ON clk.impression_id = disp.impression_id
-LEFT OUTER JOIN(
+    ) clk
+    ON clk.impression_id = disp.impression_id
+LEFT OUTER JOIN (
         SELECT
             impression_id ,
             COALESCE(clicked_item_id, 0) AS clicked_item_id ,
@@ -65,8 +68,10 @@ LEFT OUTER JOIN(
         GROUP BY
             impression_id ,
             COALESCE(clicked_item_id, 0)
-    ) mt ON mt.clicked_item_id = clk.item_id AND mt.impression_id = clk.impression_id
-LEFT OUTER JOIN(
+    ) mt
+    ON mt.clicked_item_id = clk.item_id
+        AND mt.impression_id = clk.impression_id
+LEFT OUTER JOIN (
         SELECT
             uid ,
             COUNT(DISTINCT my_events.uid) AS matched_cookies
@@ -79,7 +84,8 @@ LEFT OUTER JOIN(
         GROUP BY
             uid,
             users
-    ) uid ON disp.user_id = uid.uid
+    ) uid
+    ON disp.user_id = uid.uid
 GROUP BY
     CASE WHEN uid.matched_cookies >= 3 THEN 3
         WHEN uid.matched_cookies >= 2 THEN 2

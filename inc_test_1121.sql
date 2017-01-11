@@ -1,23 +1,22 @@
---- Environment variables ---
 CREATE TEMPORARY FUNCTION abtpop AS 'com.criteo.hadoop.hive.udf.UDFABTestPopulation';
 SET mapred.map.output.compression.codec=com.hadoop.compression.lzo.LzopCodec;
-SET hive.exec.parallel = TRUE;
+SET hive.exec.parallel = true;
 
---- Query variables ---
+-- Set variables --
 SET bi_name = cluo;
 SET test_name = dustindk;
 SET papatool_test_id = 5696;
 SET partner_id = (12629, 12364);
+
 SET test_start_users = '2016-10-07';
 SET test_start_measures = '2016-10-14';
-SET test_end = '2016-11-22';
-
+SET test_end = '2016-11-21';
 
 USE ${hiveconf:bi_name};
 
-DROP TABLE IF EXISTS ${hiveconf:test_name}_20161121;
+DROP TABLE IF EXISTS ${hiveconf:test_name}_inc_test_1121;
 
-CREATE TABLE ${hiveconf:test_name}_20161121 AS
+CREATE TABLE ${hiveconf:test_name}_inc_test_1121 AS
 SELECT
 	user_id
 	, partner_id
@@ -127,7 +126,7 @@ FROM
 		user_id
 		, partner_id
 		, transaction_id
-		, MAX(order_value) as order_value
+		, max(order_value) as order_value
 	FROM
 	(
 		SELECT
@@ -148,14 +147,12 @@ FROM
 			AND persistent_user = true
 			AND event_name = 'Sales'
 		GROUP BY user_id, partner_id, transaction_id, unixtime
-	) trans1
+	)trans1
 	GROUP BY user_id, partner_id, transaction_id
-) trans2
-GROUP BY
-	user_id
-	, partner_id
-	, CASE WHEN abtpop(user_id, ${hiveconf:papatool_test_id}) =  0
-		THEN 'exposed' else 'control' END
+)trans2
+GROUP BY user_id, partner_id, CASE WHEN abtpop(user_id, ${hiveconf:papatool_test_id})=0 THEN 'exposed' else 'control' END
+
+
 ) temp3
 GROUP BY
 	user_id

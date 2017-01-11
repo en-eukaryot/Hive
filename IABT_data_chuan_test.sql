@@ -1,23 +1,23 @@
+--- Environment variables ---
 CREATE TEMPORARY FUNCTION abtpop AS 'com.criteo.hadoop.hive.udf.UDFABTestPopulation';
 SET mapred.map.output.compression.codec=com.hadoop.compression.lzo.LzopCodec;
-SET hive.exec.parallel = true;
+SET hive.exec.parallel = TRUE;
 
--- Set variables --
+--- Query variables ---
 SET bi_name = cluo;
 SET test_name = dustindk;
 SET papatool_test_id = 5696;
 SET partner_id = (12629, 12364);
 SET partner_part = (629, 364);
-
 SET test_start_users = '2016-10-07';
 SET test_start_measures = '2016-10-14';
-SET test_end = '2016-11-15';
+SET test_end = '2016-11-22';
 
 USE ${hiveconf:bi_name};
 
-DROP TABLE IF EXISTS ${hiveconf:test_name}_20161115_test;
+DROP TABLE IF EXISTS ${hiveconf:test_name}_20161121_test;
 
-CREATE TABLE ${hiveconf:test_name}_20161115_test AS
+CREATE TABLE ${hiveconf:test_name}_20161121_test AS
 SELECT
 	user_id
 	, partner_id
